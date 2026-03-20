@@ -8,8 +8,7 @@ app = FastAPI(title="WarmPath MVP")
 origins = [
     "http://localhost:5173",
     "http://localhost:3000",
-    # Add your deployed frontend URL here after Vercel gives it to you
-    # Example: "https://warmpath.vercel.app",
+    "https://warm-path-beta.vercel.app",
 ]
 
 app.add_middleware(
@@ -17,6 +16,7 @@ app.add_middleware(
     allow_origins=origins,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 from api import router as api_router
