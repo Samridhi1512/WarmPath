@@ -250,6 +250,7 @@ npm run dev
 - Limited company-type mapping (static lookup)
 - Location signal is heuristic (no explicit location field in CSV)
 
+---
 
 ## 13. Future Direction
 
@@ -264,6 +265,7 @@ Planned improvements:
 - Outreach tracking and follow-up recommendations
 - Integration with job signals and hiring data
 
+---
 
 ## 14. Demo Flow
 
@@ -273,6 +275,7 @@ Planned improvements:
 4. Expand a company
 5. Copy outreach message
 
+---
 
 ## 15. Summary
 
