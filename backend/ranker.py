@@ -1,0 +1,164 @@
+"""Ranker — computes 0–100 relevance scores for companies. Fully deterministic."""
+
+from models import CompanyGroup, CompanyResult, ContactSelection, Preferences
+from path_labeler import label_path
+from title_categorizer import categorize_title
+
+# Small static lookup: normalized company name → company type
+_COMPANY_TYPE_LOOKUP: dict[str, str] = {
+    "google": "enterprise",
+    "meta": "enterprise",
+    "amazon": "enterprise",
+    "amazon web services (aws)": "enterprise",
+    "microsoft": "enterprise",
+    "apple": "enterprise",
+    "netflix": "enterprise",
+    "salesforce": "enterprise",
+    "oracle": "enterprise",
+    "ibm": "enterprise",
+    "intel": "enterprise",
+    "cisco": "enterprise",
+    "adobe": "enterprise",
+    "uber": "enterprise",
+    "stripe": "startup",
+    "figma": "startup",
+    "notion": "startup",
+    "vercel": "startup",
+    "supabase": "startup",
+    "linear": "startup",
+    "retool": "startup",
+    "datadog": "mid-size",
+    "snowflake": "mid-size",
+    "cloudflare": "mid-size",
+    "twilio": "mid-size",
+    "hashicorp": "mid-size",
+    "confluent": "mid-size",
+    "elastic": "mid-size",
+}
+
+# Technical keywords used to determine if target role is technical
+_TECHNICAL_ROLE_KEYWORDS = {
+    "engineer", "developer", "architect", "data", "scientist",
+    "analyst", "sde", "swe", "devops", "qa", "software", "ml",
+    "machine learning", "backend", "frontend", "fullstack",
+}
+
+
+def _is_technical_role(target_role: str) -> bool:
+    """Check if the target role contains technical keywords."""
+    words = set(target_role.lower().split())
+    return bool(words & _TECHNICAL_ROLE_KEYWORDS)
+
+
+def _title_relevance_score(position: str, target_keywords: list[str]) -> int:
+    """Score 0–60 based on keyword overlap. Primary ranking signal."""
+    if not target_keywords:
+        return 0
+
+    position_words = set(position.lower().split())
+    matches = sum(1 for kw in target_keywords if kw in position_words)
+    raw = round((matches / len(target_keywords)) * 60)
+
+    # Minimum 5 for recruiters (always somewhat relevant)
+    category = categorize_title(position)
+    if category == "recruiting" and raw < 5:
+        raw = 5
+
+    return raw
+
+
+def _title_category_bonus(position: str, is_tech_role: bool) -> int:
+    """Score 0–15 based on contact's title category relative to target role.
+
+    Recruiting gets the highest bonus, but capped at 15 so it can't
+    overpower a strong direct technical match (which scores up to 60).
+    """
+    category = categorize_title(position)
+
+    if is_tech_role:
+        return {"recruiting": 15, "technical": 10, "leadership": 5}.get(category, 0)
+    else:
+        return {"recruiting": 15, "leadership": 10, "technical": 5}.get(category, 0)
+
+
+def _location_adjustment(position: str, preferred_location: str) -> int:
+    """Score 0 or 10. Simple substring match — rough heuristic."""
+    if not preferred_location:
+        return 0
+    if preferred_location.lower() in position.lower():
+        return 10
+    return 0
+
+
+def _company_type_adjustment(
+    normalized_company: str, preferred_type: str,
+) -> int:
+    """Score 0 or 5. Static lookup only."""
+    if preferred_type == "any" or not preferred_type:
+        return 0
+    known_type = _COMPANY_TYPE_LOOKUP.get(normalized_company)
+    if known_type and known_type == preferred_type:
+        return 5
+    return 0
+
+
+def _email_bonus(email: str | None) -> int:
+    """Score 0 or 5."""
+    return 5 if email else 0
+
+
+def rank_companies(
+    groups: dict[str, CompanyGroup],
+    selections: dict[str, ContactSelection],
+    preferences: Preferences,
+) -> list[CompanyResult]:
+    """Score and rank companies. Returns sorted list of CompanyResult.
+
+    Score composition (0–100):
+      - Title relevance:       0–60  (dominant signal)
+      - Title category bonus:  0–15  (modest)
+      - Location adjustment:   0–10  (optional heuristic)
+      - Company-type match:    0–5   (optional heuristic)
+      - Email availability:    0–5   (small bonus)
+      - Clamped to 0–100
+
+    Sorting: descending by score, alphabetically by company name on ties.
+    """
+    target_keywords = [w.lower() for w in preferences.target_role.split() if w.strip()]
+    is_tech_role = _is_technical_role(preferences.target_role)
+
+    results: list[CompanyResult] = []
+
+    for norm_name, group in groups.items():
+        selection = selections.get(norm_name)
+        if not selection or not selection.contact:
+            continue
+
+        contact = selection.contact
+
+        # Compute each scoring component independently — no hidden dependencies
+        title_rel = _title_relevance_score(contact.position, target_keywords)
+        cat_bonus = _title_category_bonus(contact.position, is_tech_role)
+        loc_adj = _location_adjustment(contact.position, preferences.location)
+        type_adj = _company_type_adjustment(norm_name, preferences.company_type)
+        email_pts = _email_bonus(contact.email)
+
+        raw_score = title_rel + cat_bonus + loc_adj + type_adj + email_pts
+        score = max(0, min(100, raw_score))
+
+        results.append(
+            CompanyResult(
+                company_name=group.display_name,
+                contact_name=contact.full_name,
+                contact_title=contact.position,
+                contact_url=contact.url,
+                contact_email=contact.email,
+                path_label=label_path(score),
+                score=score,
+                contact_count=len(group.contacts),
+            )
+        )
+
+    # Sort: descending score, then alphabetically on ties
+    results.sort(key=lambda r: (-r.score, r.company_name))
+    return results
