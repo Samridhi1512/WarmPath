@@ -4,12 +4,16 @@ from models import CompanyGroup, CompanyResult, ContactSelection, Preferences
 from path_labeler import label_path
 from title_categorizer import categorize_title
 
-# Small static lookup: normalized company name → company type
+# Small static lookup: normalized company name → company type.
+# Keys must match the output of grouper._normalize_company_name (lowercase, legal suffixes stripped).
 _COMPANY_TYPE_LOOKUP: dict[str, str] = {
     "google": "enterprise",
+    "alphabet": "enterprise",
     "meta": "enterprise",
+    "meta platforms": "enterprise",
     "amazon": "enterprise",
-    "amazon web services (aws)": "enterprise",
+    "amazon web services": "enterprise",
+    "aws": "enterprise",
     "microsoft": "enterprise",
     "apple": "enterprise",
     "netflix": "enterprise",
@@ -20,6 +24,9 @@ _COMPANY_TYPE_LOOKUP: dict[str, str] = {
     "cisco": "enterprise",
     "adobe": "enterprise",
     "uber": "enterprise",
+    "walmart": "enterprise",
+    "jpmorgan chase": "enterprise",
+    "bank of america": "enterprise",
     "stripe": "startup",
     "figma": "startup",
     "notion": "startup",
@@ -27,6 +34,8 @@ _COMPANY_TYPE_LOOKUP: dict[str, str] = {
     "supabase": "startup",
     "linear": "startup",
     "retool": "startup",
+    "openai": "startup",
+    "anthropic": "startup",
     "datadog": "mid-size",
     "snowflake": "mid-size",
     "cloudflare": "mid-size",
@@ -34,6 +43,9 @@ _COMPANY_TYPE_LOOKUP: dict[str, str] = {
     "hashicorp": "mid-size",
     "confluent": "mid-size",
     "elastic": "mid-size",
+    "mongodb": "mid-size",
+    "atlassian": "mid-size",
+    "pagerduty": "mid-size",
 }
 
 # Technical keywords used to determine if target role is technical
@@ -81,11 +93,18 @@ def _title_category_bonus(position: str, is_tech_role: bool) -> int:
         return {"recruiting": 15, "leadership": 10, "technical": 5}.get(category, 0)
 
 
-def _location_adjustment(position: str, preferred_location: str) -> int:
-    """Score 0 or 10. Simple substring match — rough heuristic."""
+def _location_adjustment(company_name: str, position: str, preferred_location: str) -> int:
+    """Score 0 or 10. Checks if preferred location appears in company name or position.
+
+    LinkedIn CSV has no dedicated location column, so this is a best-effort
+    heuristic. Returns 0 cleanly when no location preference is set or when
+    no signal is found — never penalizes.
+    """
     if not preferred_location:
         return 0
-    if preferred_location.lower() in position.lower():
+    loc = preferred_location.lower()
+    haystack = f"{company_name} {position}".lower()
+    if loc in haystack:
         return 10
     return 0
 
@@ -93,13 +112,20 @@ def _location_adjustment(position: str, preferred_location: str) -> int:
 def _company_type_adjustment(
     normalized_company: str, preferred_type: str,
 ) -> int:
-    """Score 0 or 5. Static lookup only."""
+    """Score -5 to +15. Static lookup only.
+
+    +15 if company matches preferred type (meaningful boost).
+    -5  if company is in the lookup but is a different type (mild penalty).
+     0  if company is unknown or preference is 'any'.
+    """
     if preferred_type == "any" or not preferred_type:
         return 0
     known_type = _COMPANY_TYPE_LOOKUP.get(normalized_company)
-    if known_type and known_type == preferred_type:
-        return 5
-    return 0
+    if known_type is None:
+        return 0  # Unknown company — no signal, no penalty
+    if known_type == preferred_type:
+        return 15
+    return -5
 
 
 def _email_bonus(email: str | None) -> int:
@@ -117,8 +143,8 @@ def rank_companies(
     Score composition (0–100):
       - Title relevance:       0–60  (dominant signal)
       - Title category bonus:  0–15  (modest)
+      - Company-type match:   -5–15  (meaningful when known)
       - Location adjustment:   0–10  (optional heuristic)
-      - Company-type match:    0–5   (optional heuristic)
       - Email availability:    0–5   (small bonus)
       - Clamped to 0–100
 
@@ -139,7 +165,7 @@ def rank_companies(
         # Compute each scoring component independently — no hidden dependencies
         title_rel = _title_relevance_score(contact.position, target_keywords)
         cat_bonus = _title_category_bonus(contact.position, is_tech_role)
-        loc_adj = _location_adjustment(contact.position, preferences.location)
+        loc_adj = _location_adjustment(group.display_name, contact.position, preferences.location)
         type_adj = _company_type_adjustment(norm_name, preferences.company_type)
         email_pts = _email_bonus(contact.email)
 
