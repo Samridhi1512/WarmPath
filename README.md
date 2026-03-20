@@ -84,6 +84,7 @@ This ensures transparency, user control, and reproducibility.
 Use the included `Connections.csv`.
 
 Steps:
+
 1. Upload the file
 2. Enter:
    - Target role: `software engineer`
@@ -91,6 +92,7 @@ Steps:
 3. Click **Analyze**
 
 Expected behavior:
+
 - ~23 valid connections, ~3 excluded (missing company)
 - ~21 unique companies ranked by relevance
 - Warm Path / Stretch Path / Explore labels visible
@@ -98,7 +100,7 @@ Expected behavior:
 
 ### 5.2 Option 2 — Use Your Own LinkedIn Data
 
-1. Go to LinkedIn → Settings → Data Privacy → Download my data → Download larger data archive (This downloads multiple CSVs, one of them is Connections.csv)
+1. Go to LinkedIn → Settings → Data Privacy → Download my data → Download larger data archive
 2. Request the Connections export
 3. Download the CSV
 4. Upload it into WarmPath
@@ -114,59 +116,114 @@ CSV → Normalize → Group by Company → Select Best Contact → Rank → Labe
 ```
 
 - Core pipeline is fully deterministic
-- LLM is used only on demand for explanations and outreach drafts
-- Fallback responses ensure the system works without external dependencies
+- LLM is used only on demand (not in ranking)
+- System works without external dependencies via fallback responses
 
 ---
 
-## 7. Architecture
+## 7. Ranking Logic (Simplified)
+
+Each company is scored (0–100) using:
+
+- Title relevance (0–60) → strongest signal
+- Title category bonus (0–15)
+- Company type:
+  - match: +15
+  - mismatch (known companies): -5
+- Location match: +10 (only when signal exists)
+- Email availability: +5
+
+Then labeled:
+
+- ≥70 → **Warm Path**
+- 40–69 → **Stretch Path**
+- <40 → **Explore**
+
+Note:
+
+- Ranking is deterministic (no LLM involvement)
+- Filters (company type, location) act as **adjustments**, not overrides
+
+---
+
+## 8. AI-Assisted Outreach
+
+WarmPath generates:
+
+- Explanation (why this is relevant)
+- Next action recommendation
+- Personalized outreach message
+
+### Configuration
+
+```bash
+export LLM_API_KEY=your_openai_key
+export LLM_MODEL=gpt-4o-mini
+```
+
+| Behavior | Result |
+|---|---|
+| With API key | AI-generated responses |
+| Without API key | Fallback deterministic templates |
+
+This ensures the product remains usable in all environments.
+
+---
+
+## 9. Architecture
 
 | Layer | Technology |
-|-------|-----------|
+|---|---|
 | Frontend | React + TypeScript (Vite) |
 | Backend | FastAPI |
-| Data processing | Deterministic pipeline (parsing, normalization, grouping, ranking) |
-| LLM | Optional, invoked only on detail expansion |
+| Data processing | Deterministic pipeline |
+| LLM | Optional, invoked on demand |
+
+Deployment:
+
+- Frontend → Vercel
+- Backend → Render
 
 ---
 
-## 8. Project Structure
+## 10. Project Structure
 
 ```
 backend/
-  main.py              FastAPI entry point + CORS
-  api.py               POST /api/analyze + POST /api/details
-  models.py            All data model dataclasses
-  csv_parser.py        LinkedIn CSV parser (handles preamble)
-  normalizer.py        Whitespace trimming, date parsing, exclusion tracking
-  title_categorizer.py Keyword-based title → category mapping
-  grouper.py           Company name normalization + grouping
-  contact_selector.py  Best contact selection per company
-  ranker.py            0–100 scoring + sorting
-  path_labeler.py      Score → Warm Path / Stretch Path / Explore
-  llm_advisor.py       OpenAI integration with fallback
+  main.py
+  api.py
+  models.py
+  csv_parser.py
+  normalizer.py
+  title_categorizer.py
+  grouper.py
+  contact_selector.py
+  ranker.py
+  path_labeler.py
+  llm_advisor.py
   requirements.txt
 
 frontend/
   src/
-    App.tsx            Main app component + state
-    api.ts             Axios calls to backend
-    components.tsx     All UI components
-    types.ts           TypeScript interfaces
-    main.tsx           React entry point
+    App.tsx
+    api.ts
+    components.tsx
+    types.ts
+    main.tsx
   package.json
   vite.config.ts
   tsconfig.json
   index.html
 
-Connections.csv        Sample LinkedIn export for testing
+Connections.csv
+README.md
 ```
 
 ---
 
-## 9. Quick Start
+## 11. Quick Start
 
-### 9.1 Backend
+### Backend
 
 ```bash
 cd backend
@@ -174,9 +231,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-API runs at: `http://localhost:8000`
-
-### 9.2 Frontend
+### Frontend
 
 ```bash
 cd frontend
@@ -184,53 +239,33 @@ npm install
 npm run dev
 ```
 
-App runs at: `http://localhost:5173`
-
-The frontend proxies `/api` requests to the backend.
-
 ---
 
-## 10. LLM Details (Optional)
-
-To enable AI-generated explanations and outreach drafts:
-
-```bash
-export LLM_API_KEY=your_openai_key
-export LLM_MODEL=gpt-4o-mini
-```
-
-Without this:
-- the app still works
-- fallback messaging is used
-
----
-
-## 11. Limitations (MVP)
+## 12. Limitations (MVP)
 
 - Only first-degree connections
 - Requires manual CSV upload
 - No real-time job data integration
 - No second-degree network analysis
-- Limited company-type mapping
-- Heuristic-based ranking
+- Limited company-type mapping (static lookup)
+- Location signal is heuristic (no explicit location field in CSV)
 
----
 
-## 12. Future Direction
+## 13. Future Direction
 
 WarmPath is designed to evolve into a network intelligence system.
 
 Planned improvements:
+
 - Direct authenticated data import (removing CSV dependency)
 - Second-degree connection path discovery
 - Startup and hidden opportunity discovery beyond job boards
-- Personalized ranking using user feedback and interaction signals
+- Personalized ranking using user behavior
 - Outreach tracking and follow-up recommendations
-- Enrichment with company hiring signals
+- Integration with job signals and hiring data
 
----
 
-## 13. Demo Flow
+## 14. Demo Flow
 
 1. Upload CSV
 2. Enter target role
@@ -238,9 +273,8 @@ Planned improvements:
 4. Expand a company
 5. Copy outreach message
 
----
 
-## 14. Summary
+## 15. Summary
 
 WarmPath helps move from:
 
@@ -249,4 +283,3 @@ WarmPath helps move from:
 to:
 
 > "I know exactly who to reach out to, where, and why."
-
