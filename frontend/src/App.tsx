@@ -61,9 +61,8 @@ export default function App() {
         zIndex: 10,
       }}>
         <div style={{ maxWidth: 860, margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 22, lineHeight: 1 }}>🔥</span>
           <span style={{ fontSize: 20, fontWeight: 700, color: "#1e293b", letterSpacing: "-0.02em" }}>WarmPath</span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: "#8b5cf6", background: "#ede9fe", padding: "2px 8px", borderRadius: 6, marginLeft: 4 }}>MVP</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#8b5cf6", background: "#ede9fe", padding: "2px 8px", borderRadius: 6, marginLeft: 4 }}>Beta</span>
         </div>
       </header>
 
