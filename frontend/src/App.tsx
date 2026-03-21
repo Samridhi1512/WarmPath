@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { analyzeConnections } from "./api";
 import {
   ErrorAlert,
@@ -14,6 +14,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AnalyzeResponse | null>(null);
   const [lastPrefs, setLastPrefs] = useState<Preferences | null>(null);
+
+  useEffect(() => {
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+    fetch(`${backendUrl}/health`).catch(() => {
+      // Ignore warm-up failures; real requests will still handle errors normally
+    });
+  }, []);
 
   const handleSubmit = async (prefs: Preferences, file: File) => {
     setLoading(true);

@@ -574,7 +574,7 @@ export function LoadingIndicator() {
         Analyzing your network...
       </p>
       <p style={{ margin: "6px 0 0", fontSize: 13, color: "#94a3b8" }}>
-        Parsing, grouping, and ranking your connections
+        Parsing, grouping, and ranking your connections. First load may take a few seconds.
       </p>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

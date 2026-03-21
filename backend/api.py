@@ -10,9 +10,10 @@ from fastapi.responses import JSONResponse
 from contact_selector import select_best_contact
 from csv_parser import parse_csv
 from grouper import group_by_company
+from llm_advisor import classify_company_types
 from models import Preferences, ParsingSummary
 from normalizer import normalize_connections
-from ranker import rank_companies
+from ranker import rank_companies, get_unknown_companies
 from title_categorizer import categorize_all_contacts
 
 router = APIRouter(prefix="/api")
@@ -71,7 +72,15 @@ async def analyze(
         selections[norm_name] = select_best_contact(group, target_keywords)
 
     # --- Rank and label ---
-    results = rank_companies(groups, selections, prefs)
+    # Enrich unknown companies with LLM classification (if API key is set)
+    # Only when user has a company type preference — skip the LLM call for "any"
+    enriched_types: dict[str, str] = {}
+    if prefs.company_type != "any":
+        unknown = get_unknown_companies(groups)
+        if unknown:
+            enriched_types = await classify_company_types(unknown)
+
+    results = rank_companies(groups, selections, prefs, enriched_types)
 
     # --- Build parsing summary ---
     summary = ParsingSummary(

@@ -111,16 +111,20 @@ def _location_adjustment(company_name: str, position: str, preferred_location: s
 
 def _company_type_adjustment(
     normalized_company: str, preferred_type: str,
+    enriched_types: dict[str, str] | None = None,
 ) -> int:
-    """Score -5 to +15. Static lookup only.
+    """Score -5 to +15. Static lookup first, then LLM-enriched fallback.
 
     +15 if company matches preferred type (meaningful boost).
-    -5  if company is in the lookup but is a different type (mild penalty).
+    -5  if company is in a lookup but is a different type (mild penalty).
      0  if company is unknown or preference is 'any'.
     """
     if preferred_type == "any" or not preferred_type:
         return 0
+    # Check static lookup first, then enriched types
     known_type = _COMPANY_TYPE_LOOKUP.get(normalized_company)
+    if known_type is None and enriched_types:
+        known_type = enriched_types.get(normalized_company)
     if known_type is None:
         return 0  # Unknown company — no signal, no penalty
     if known_type == preferred_type:
@@ -133,10 +137,16 @@ def _email_bonus(email: str | None) -> int:
     return 5 if email else 0
 
 
+def get_unknown_companies(groups: dict[str, "CompanyGroup"]) -> list[str]:
+    """Return normalized company names not in the static lookup."""
+    return [name for name in groups if name not in _COMPANY_TYPE_LOOKUP]
+
+
 def rank_companies(
     groups: dict[str, CompanyGroup],
     selections: dict[str, ContactSelection],
     preferences: Preferences,
+    enriched_types: dict[str, str] | None = None,
 ) -> list[CompanyResult]:
     """Score and rank companies. Returns sorted list of CompanyResult.
 
@@ -147,6 +157,9 @@ def rank_companies(
       - Location adjustment:   0–10  (optional heuristic)
       - Email availability:    0–5   (small bonus)
       - Clamped to 0–100
+
+    enriched_types: optional dict from LLM classification for companies
+    not in the static lookup. Keys are normalized company names.
 
     Sorting: descending by score, alphabetically by company name on ties.
     """
@@ -166,7 +179,7 @@ def rank_companies(
         title_rel = _title_relevance_score(contact.position, target_keywords)
         cat_bonus = _title_category_bonus(contact.position, is_tech_role)
         loc_adj = _location_adjustment(group.display_name, contact.position, preferences.location)
-        type_adj = _company_type_adjustment(norm_name, preferences.company_type)
+        type_adj = _company_type_adjustment(norm_name, preferences.company_type, enriched_types)
         email_pts = _email_bonus(contact.email)
 
         raw_score = title_rel + cat_bonus + loc_adj + type_adj + email_pts
