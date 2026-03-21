@@ -4,6 +4,13 @@ Turn your LinkedIn connections into a ranked referral strategy.
 
 Upload a LinkedIn connections CSV, enter your target role, and get a ranked list of companies with the best contact at each — scored, labeled, and ready for outreach.
 
+## Live Demo
+
+https://warm-path-beta.vercel.app
+
+Test it using the included `Connections.csv` file or upload your own LinkedIn export.
+Note: The app may take a few seconds to load initially as the backend is hosted on a free tier.
+
 ---
 
 ## 1. Problem
